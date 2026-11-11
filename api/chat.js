@@ -15,7 +15,8 @@
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://zorswazitkthxmaqvekh.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvcnN3YXppdGt0aHhtYXF2ZWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzODg5MzYsImV4cCI6MjEwOTk2NDkzNn0.XJAgkTMmD-If9QZ6c-xOya61cWfIpbEn_KfvtxwaHrI';
-const GROQ_MODEL   = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const GROQ_MODELS  = [process.env.GROQ_MODEL, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+  .filter((m, i, a) => m && a.indexOf(m) === i);
 const WHATSAPP     = process.env.STORE_WHATSAPP || '+244 927 714 821';
 
 // Mantenha igual ao CFG do index.html
@@ -156,26 +157,33 @@ module.exports = async function handler(req, res) {
     let itens = [];
     try { itens = await obterCatalogo(); } catch (e) { console.error('Catálogo:', e.message); }
 
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0.3,
-        max_tokens: 450,
-        messages: [
-          { role: 'system', content: promptSistema(itens, mensagens[mensagens.length - 1].content) },
-          ...mensagens
-        ]
-      })
-    }).finally(() => clearTimeout(timer));
+    const system = promptSistema(itens, mensagens[mensagens.length - 1].content);
+    let r = null;
+    for (const modelo of GROQ_MODELS) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          signal: ctrl.signal,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
+          body: JSON.stringify({
+            model: modelo,
+            temperature: 0.3,
+            max_tokens: 450,
+            messages: [{ role: 'system', content: system }, ...mensagens]
+          })
+        });
+      } finally { clearTimeout(timer); }
 
-    if (r.status === 429) return res.status(429).json({ error: 'O assistente está ocupado. Tente de novo dentro de instantes.' });
-    if (!r.ok) {
-      console.error('Groq', r.status, (await r.text()).slice(0, 300));
+      if (r.ok) break;
+      const txt = (await r.text()).slice(0, 300);
+      console.error('Groq', modelo, r.status, txt);   // ver em Vercel > Logs
+      if (r.status === 401 || r.status === 403) break;  // chave inválida/bloqueada: outro modelo não ajuda
+      if (r.status === 429) return res.status(429).json({ error: 'O assistente está ocupado. Tente de novo dentro de instantes.' });
+      // 400/404 (modelo removido), 5xx: tenta o modelo seguinte
+    }
+    if (!r || !r.ok) {
       return res.status(502).json({ error: 'O assistente não está disponível neste momento.' });
     }
     const dados = await r.json();
