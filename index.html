@@ -2361,7 +2361,11 @@ async function renderAdminEncomendas(body) {
             </td>
             <td style="font-size:12px;color:var(--text3);white-space:nowrap">${fmtDate(e.criado_em)}</td>
             <td>
-              <button class="btn btn-xs btn-ghost" onclick="verEncomendaDetalhe('${e.id}')">Ver</button>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-xs btn-ghost" onclick="verEncomendaDetalhe('${e.id}')">Ver</button>
+                <button class="btn btn-xs btn-ghost" title="Editar" onclick="editarEncomenda('${e.id}')">✏️</button>
+                <button class="btn btn-xs btn-danger" title="Eliminar" onclick="excluirEncomenda('${e.id}')">🗑</button>
+              </div>
             </td>
           </tr>`).join('')}
           ${!encomendas.length?`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Sem encomendas ainda.</td></tr>`:''}
@@ -2401,6 +2405,7 @@ async function verEncomendaDetalhe(id) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+      <button class="btn btn-ghost" onclick="editarEncomenda('${enc.id}')">✏️ Editar</button>
       <button class="btn btn-primary" onclick="gerarFatura({id:'${enc.id}',total:${enc.total},subtotal:${enc.subtotal||0},taxa_envio:${enc.taxa_envio||0},itens:${JSON.stringify((enc.itens_encomenda||[]).map(i=>({nome:i.produtos?.nome||'?',qty:i.quantidade,preco_unitario:i.preco_unit||0})))}})">🧾 Gerar Factura</button>
     </div>`);
 }
@@ -2573,7 +2578,7 @@ async function renderAdminProdutos(body) {
       <table class="data-table" id="tabela-produtos">
         <thead><tr><th>Imagem</th><th>Produto</th><th>Marca/Modelo</th><th>Preço</th><th>Stock</th><th>Garantia</th><th>Estado</th><th>Acções</th></tr></thead>
         <tbody>
-          ${produtos.map(p=>`<tr data-nome="${(p.nome||'').toLowerCase()}" data-marca="${(p.marca||'').toLowerCase()}">
+          ${produtos.map(p=>`<tr data-nome="${(p.nome||'').toLowerCase()}" data-marca="${(p.marca||'').toLowerCase()}" data-titulo="${(p.nome||'').replace(/"/g,'&quot;')}">
             <td><div class="thumb">${p.imagem_url?`<img src="${p.imagem_url}"/>`:`<span>${p.emoji||'📦'}</span>`}</div></td>
             <td><div style="font-weight:600;font-size:13px">${p.nome}</div><div style="font-size:11px;color:var(--blue)">${p.categoria_nome||''}</div></td>
             <td style="font-size:12px;color:var(--text2)">${[p.marca,p.modelo].filter(Boolean).join(' · ')||'—'}</td>
@@ -2586,6 +2591,7 @@ async function renderAdminProdutos(body) {
               <button class="btn btn-xs ${p.activo?'btn-danger':'btn-success'}" onclick="apiToggleActivo('${p.id}',${p.activo}).then(()=>{toast('${p.activo?'Desactivado':'Activado'}!');loadAdminSection()})">
                 ${p.activo?'Desact.':'Activar'}
               </button>
+              <button class="btn btn-xs btn-danger" title="Eliminar" onclick="excluirProduto('${p.id}',this.closest('tr').dataset.titulo)">🗑</button>
             </div></td>
           </tr>`).join('')}
           ${!produtos.length?`<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Sem produtos. Adicione o primeiro.</td></tr>`:''}
@@ -2720,7 +2726,7 @@ async function renderAdminCategorias(body) {
       <table class="data-table">
         <thead><tr><th>Ícone</th><th>Nome</th><th>Descrição</th><th>Ordem</th><th>Estado</th><th>Acções</th></tr></thead>
         <tbody>
-          ${cats.map(c=>`<tr>
+          ${cats.map(c=>`<tr data-nome="${(c.nome||'').replace(/"/g,'&quot;')}">
             <td style="font-size:28px">${c.icone}</td>
             <td style="font-weight:600">${c.nome}</td>
             <td style="font-size:13px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.descricao||'—'}</td>
@@ -2729,6 +2735,7 @@ async function renderAdminCategorias(body) {
             <td><div style="display:flex;gap:6px">
               <button class="btn btn-xs btn-ghost" onclick="abrirModalCategoria(${JSON.stringify(c).replace(/"/g,'&quot;')})">✏️ Editar</button>
               <button class="btn btn-xs ${c.activo?'btn-danger':'btn-success'}" onclick="toggleCategoria('${c.id}',${c.activo})">${c.activo?'Desact.':'Activar'}</button>
+              <button class="btn btn-xs btn-danger" title="Eliminar" onclick="excluirCategoria('${c.id}',this.closest('tr').dataset.nome)">🗑</button>
             </div></td>
           </tr>`).join('')}
         </tbody>
@@ -2780,23 +2787,21 @@ async function renderAdminClientes(body) {
     </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Papel</th><th>Registado</th><th>Acção</th></tr></thead>
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Papel</th><th>Registado</th><th>Acções</th></tr></thead>
         <tbody>
-          ${clientes.map(u=>`<tr>
+          ${clientes.map(u=>`<tr data-nome="${(u.nome||u.email||'').replace(/"/g,'&quot;')}">
             <td><div style="display:flex;align-items:center;gap:10px">
               <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${(u.nome||'U').slice(0,2).toUpperCase()}</div>
               <span style="font-weight:600;font-size:13px">${u.nome||'—'}</span>
             </div></td>
             <td style="font-size:13px;color:var(--text2)">${u.email||'—'}</td>
             <td style="font-size:12px;color:var(--text3)">${u.telefone||'—'}</td>
-            <td><span class="badge ${u.papel==='admin'?'badge-info':'badge-success'}">${u.papel}</span></td>
+            <td><span class="badge ${u.papel==='admin'?'badge-info':'badge-success'}">${u.papel}</span>${u.activo===false?' <span class="badge badge-danger" style="font-size:10px">Suspensa</span>':''}</td>
             <td style="font-size:12px;color:var(--text3)">${fmtDate(u.criado_em)}</td>
-            <td>
-              <select onchange="apiUpdateUtilizador('${u.id}',{papel:this.value}).then(()=>toast('Papel actualizado!')).catch(e=>toast(e.message,'error'))" style="font-size:12px;padding:4px 8px;width:auto">
-                <option ${u.papel==='cliente'?'selected':''}>cliente</option>
-                <option ${u.papel==='admin'?'selected':''}>admin</option>
-              </select>
-            </td>
+            <td><div style="display:flex;gap:6px">
+              <button class="btn btn-xs btn-ghost" title="Editar" onclick="editarPerfil('${u.id}')">✏️ Editar</button>
+              <button class="btn btn-xs btn-danger" title="Eliminar" onclick="excluirUtilizador('${u.id}',this.closest('tr').dataset.nome)">🗑</button>
+            </div></td>
           </tr>`).join('')}
           ${!clientes.length?`<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text3)">Sem clientes registados.</td></tr>`:''}
         </tbody>
@@ -2824,6 +2829,7 @@ async function renderAdminAvaliacoes(body) {
             <td style="font-size:13px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.comentario||'—'}</td>
             <td><span class="badge ${a.aprovado?'badge-success':'badge-warning'}">${a.aprovado?'Aprovada':'Pendente'}</span></td>
             <td><div style="display:flex;gap:6px">
+              <button class="btn btn-xs btn-ghost" title="Editar" onclick="editarAvaliacao('${a.id}')">✏️</button>
               ${!a.aprovado?`<button class="btn btn-xs btn-success" onclick="apiAprovarAvaliacao('${a.id}').then(()=>{toast('Aprovada!');loadAdminSection()})">✓ Aprovar</button>`:''}
               <button class="btn btn-xs btn-danger" onclick="if(confirm('Remover?'))apiRemoverAvaliacao('${a.id}').then(()=>{toast('Removida!');loadAdminSection()})">✕</button>
             </div></td>
@@ -2849,7 +2855,7 @@ async function renderAdminEntregadores(body) {
       <table class="data-table">
         <thead><tr><th>Nome</th><th>Email</th><th>Telefone</th><th>Estado</th><th>Desde</th><th>Acções</th></tr></thead>
         <tbody>
-          ${lista.map(e=>`<tr>
+          ${lista.map(e=>`<tr data-nome="${(e.nome||e.email||'').replace(/"/g,'&quot;')}">
             <td><div style="display:flex;align-items:center;gap:10px">
               <div style="width:34px;height:34px;border-radius:50%;background:var(--blue-light);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${(e.nome||'E').slice(0,2).toUpperCase()}</div>
               <span style="font-weight:600">${e.nome||'—'}</span>
@@ -2860,6 +2866,8 @@ async function renderAdminEntregadores(body) {
             <td style="font-size:12px;color:var(--text3)">${fmtDate(e.criado_em)}</td>
             <td><div style="display:flex;gap:6px">
               <button class="btn btn-xs ${e.activo===false?'btn-success':'btn-ghost'}" onclick="apiToggleEntregador('${e.id}',${e.activo===false}).then(()=>{toast('Actualizado!');loadAdminSection()})">${e.activo===false?'✓ Activar':'⏸ Suspender'}</button>
+              <button class="btn btn-xs btn-ghost" title="Editar" onclick="editarPerfil('${e.id}')">✏️ Editar</button>
+              <button class="btn btn-xs btn-danger" title="Eliminar" onclick="excluirUtilizador('${e.id}',this.closest('tr').dataset.nome)">🗑</button>
             </div></td>
           </tr>`).join('')}
         </tbody>
@@ -3610,6 +3618,223 @@ function verComprovativo(url) {
   modal.innerHTML = modalHtml;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+}
+
+
+// ============================================================
+// ADMIN — EDITAR (UPDATE) E ELIMINAR (DELETE)
+// Requer o ficheiro admin_crud.sql executado uma vez no Supabase
+// (só para eliminar utilizadores/entregadores).
+// ============================================================
+function crudEsc(v) {
+  return String(v ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function crudMsg(err, fallback) {
+  const m = (err && (err.message || err.details)) || fallback || 'Erro desconhecido';
+  if (err && err.code === '23503') return 'Não é possível eliminar: existem registos associados (por exemplo, encomendas). Desactive em vez de eliminar.';
+  if (err && err.code === 'PGRST202') return 'Falta executar o ficheiro admin_crud.sql no Supabase (SQL Editor).';
+  if (err && err.code === '42501') return 'Sem permissão para esta operação.';
+  return m;
+}
+// UPDATE genérico: lança erro se falhar ou se nenhuma linha for alterada (bloqueio por RLS)
+async function apiAtualizar(tabela, id, dados) {
+  const {data, error} = await sb.from(tabela).update(dados).eq('id', id);
+  if (error) throw error;
+  if (!Array.isArray(data) || !data.length) throw new Error('Nada foi alterado (sem permissão ou registo inexistente).');
+  cache.clear();
+  return data[0];
+}
+// DELETE genérico: lança erro se falhar ou se nenhuma linha for apagada
+async function apiEliminar(tabela, id) {
+  const {data, error} = await sb.from(tabela).delete().eq('id', id);
+  if (error) throw error;
+  if (!Array.isArray(data) || !data.length) throw new Error('Nada foi eliminado (sem permissão ou registo inexistente).');
+  cache.clear();
+  return data;
+}
+async function apiObterUm(tabela, id) {
+  const {data, error} = await sb.from(tabela).select('*').eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+function crudBloquear(btn, texto) { if (btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = texto || 'A guardar...'; } }
+function crudDesbloquear(btn) { if (btn) { btn.disabled = false; btn.textContent = btn.dataset.t || 'Guardar'; } }
+
+// ── PRODUTOS: eliminar ──────────────────────────────────────
+async function excluirProduto(id, nome) {
+  if (!confirm(`Eliminar o produto "${nome}"?\n\nEsta acção não pode ser desfeita.`)) return;
+  try {
+    await apiEliminar('produtos', id);
+    toast('Produto eliminado!');
+    loadAdminSection();
+  } catch(e) {
+    if (e && e.code === '23503') {
+      if (confirm('Este produto já foi vendido e não pode ser eliminado (o histórico de vendas fica protegido).\n\nQuer desactivá-lo? Deixa de aparecer na loja.')) {
+        await apiToggleActivo(id, true);
+        toast('Produto desactivado!');
+        loadAdminSection();
+      }
+    } else toast(crudMsg(e), 'error');
+  }
+}
+
+// ── CATEGORIAS: eliminar ────────────────────────────────────
+async function excluirCategoria(id, nome) {
+  if (!confirm(`Eliminar a categoria "${nome}"?\n\nOs produtos desta categoria ficam sem categoria.`)) return;
+  try {
+    await apiEliminar('categorias', id);
+    toast('Categoria eliminada!');
+    loadAdminSection();
+  } catch(e) { toast(crudMsg(e), 'error'); }
+}
+
+// ── ENCOMENDAS: editar dados e eliminar ─────────────────────
+async function editarEncomenda(id) {
+  let e;
+  try { e = await apiObterUm('encomendas', id); } catch(err) { toast(crudMsg(err), 'error'); return; }
+  const metodos = ['Pagamento na Entrega','Transferência Bancária','Multicaixa Express','TPA/POS'];
+  const lista = metodos.includes(e.metodo_pagamento) || !e.metodo_pagamento ? metodos : [e.metodo_pagamento, ...metodos];
+  openModal(`
+    <div class="modal-header"><h2 style="font-size:18px">Editar encomenda #${crudEsc(String(e.id).slice(0,8))}</h2><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Endereço de entrega</label><input id="ee-end" value="${crudEsc(e.endereco_entrega)}"/></div>
+      <div class="form-row">
+        <div class="form-group"><label>Cidade</label><input id="ee-cid" value="${crudEsc(e.cidade_entrega)}"/></div>
+        <div class="form-group"><label>Província</label><input id="ee-prov" value="${crudEsc(e.provincia_entrega)}"/></div>
+      </div>
+      <div class="form-group"><label>Método de pagamento</label>
+        <select id="ee-met">${lista.map(m=>`<option ${e.metodo_pagamento===m?'selected':''}>${crudEsc(m)}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Observações</label><textarea id="ee-obs" rows="2">${crudEsc(e.observacoes)}</textarea></div>
+      <div style="font-size:12px;color:var(--text3)">O estado altera-se na lista de encomendas. Os valores e itens não são editáveis, para proteger o histórico e o stock.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="ee-save" onclick="salvarEdicaoEncomenda('${crudEsc(e.id)}')">Guardar</button>
+    </div>`);
+}
+async function salvarEdicaoEncomenda(id) {
+  const v = k => document.getElementById(k)?.value?.trim() || null;
+  const btn = document.getElementById('ee-save'); crudBloquear(btn);
+  try {
+    await apiAtualizar('encomendas', id, {
+      endereco_entrega: v('ee-end'), cidade_entrega: v('ee-cid'), provincia_entrega: v('ee-prov'),
+      metodo_pagamento: v('ee-met'), observacoes: v('ee-obs')
+    });
+    toast('Encomenda actualizada!'); closeModal(); loadAdminSection();
+  } catch(e) { toast(crudMsg(e), 'error'); crudDesbloquear(btn); }
+}
+async function excluirEncomenda(id) {
+  if (!confirm(`Eliminar a encomenda #${String(id).slice(0,8)}?\n\nOs itens e comprovativos também são apagados. O stock dos produtos volta ao armazém (se a encomenda não estava cancelada ou devolvida).\n\nEsta acção não pode ser desfeita.`)) return;
+  try {
+    await apiEliminar('encomendas', id);
+    toast('Encomenda eliminada!');
+    loadAdminSection();
+  } catch(e) { toast(crudMsg(e), 'error'); }
+}
+
+// ── PERFIS (clientes e entregadores): editar e eliminar ─────
+async function editarPerfil(id) {
+  let u;
+  try { u = await apiObterUm('profiles', id); } catch(err) { toast(crudMsg(err), 'error'); return; }
+  const eu = S.user && S.user.id === u.id;
+  openModal(`
+    <div class="modal-header"><h2 style="font-size:18px">Editar utilizador</h2><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Nome</label><input id="ep-nome" value="${crudEsc(u.nome)}"/></div>
+      <div class="form-group"><label>E-mail (não editável)</label><input value="${crudEsc(u.email)}" disabled/></div>
+      <div class="form-row">
+        <div class="form-group"><label>Telefone</label><input id="ep-tel" value="${crudEsc(u.telefone)}"/></div>
+        <div class="form-group"><label>Papel</label>
+          <select id="ep-papel" ${eu?'disabled':''}>
+            ${['cliente','entregador','admin'].map(p=>`<option ${u.papel===p?'selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Morada</label><input id="ep-mor" value="${crudEsc(u.morada)}"/></div>
+      <div class="form-group"><label>Estado da conta</label>
+        <select id="ep-act" ${eu?'disabled':''}>
+          <option value="true" ${u.activo!==false?'selected':''}>Activa</option>
+          <option value="false" ${u.activo===false?'selected':''}>Suspensa</option>
+        </select>
+      </div>
+      ${eu?'<div style="font-size:12px;color:var(--text3)">Esta é a sua conta: o papel e o estado não podem ser alterados aqui.</div>':''}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="ep-save" onclick="salvarEdicaoPerfil('${crudEsc(u.id)}')">Guardar</button>
+    </div>`);
+}
+async function salvarEdicaoPerfil(id) {
+  const nome = document.getElementById('ep-nome')?.value?.trim();
+  if (!nome) { toast('O nome é obrigatório', 'error'); return; }
+  const dados = {
+    nome,
+    telefone: document.getElementById('ep-tel')?.value?.trim() || null,
+    morada: document.getElementById('ep-mor')?.value?.trim() || null
+  };
+  if (!(S.user && S.user.id === id)) {
+    dados.papel = document.getElementById('ep-papel')?.value;
+    dados.activo = document.getElementById('ep-act')?.value === 'true';
+  }
+  const btn = document.getElementById('ep-save'); crudBloquear(btn);
+  try {
+    await apiAtualizar('profiles', id, dados);
+    toast('Utilizador actualizado!'); closeModal(); loadAdminSection();
+  } catch(e) { toast(crudMsg(e), 'error'); crudDesbloquear(btn); }
+}
+async function excluirUtilizador(id, nome) {
+  if (S.user && S.user.id === id) { toast('Não pode eliminar a sua própria conta.', 'error'); return; }
+  if (!confirm(`Eliminar o utilizador "${nome}"?\n\nA conta de acesso e o perfil são apagados. Só é possível se não tiver encomendas.\n\nEsta acção não pode ser desfeita.`)) return;
+  try {
+    const token = await getAuthToken();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_delete_user`, {
+      method: 'POST',
+      headers: {'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({uid: id})
+    });
+    if (!res.ok) { throw await res.json().catch(() => ({message: res.statusText})); }
+    cache.clear();
+    toast('Utilizador eliminado!');
+    loadAdminSection();
+  } catch(e) { toast(crudMsg(e), 'error'); }
+}
+
+// ── AVALIAÇÕES: editar ──────────────────────────────────────
+async function editarAvaliacao(id) {
+  let a;
+  try { a = await apiObterUm('avaliacoes', id); } catch(err) { toast(crudMsg(err), 'error'); return; }
+  openModal(`
+    <div class="modal-header"><h2 style="font-size:18px">Editar avaliação</h2><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>Nota</label>
+          <select id="ea-nota">${[1,2,3,4,5].map(n=>`<option value="${n}" ${a.nota===n?'selected':''}>${'★'.repeat(n)} (${n})</option>`).join('')}</select>
+        </div>
+        <div class="form-group"><label>Estado</label>
+          <select id="ea-apr">
+            <option value="true" ${a.aprovado?'selected':''}>Aprovada</option>
+            <option value="false" ${!a.aprovado?'selected':''}>Pendente</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Comentário</label><textarea id="ea-com" rows="3">${crudEsc(a.comentario)}</textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="ea-save" onclick="salvarEdicaoAvaliacao('${crudEsc(a.id)}')">Guardar</button>
+    </div>`);
+}
+async function salvarEdicaoAvaliacao(id) {
+  const btn = document.getElementById('ea-save'); crudBloquear(btn);
+  try {
+    await apiAtualizar('avaliacoes', id, {
+      nota: Number(document.getElementById('ea-nota')?.value),
+      aprovado: document.getElementById('ea-apr')?.value === 'true',
+      comentario: document.getElementById('ea-com')?.value?.trim() || null
+    });
+    toast('Avaliação actualizada!'); closeModal(); loadAdminSection();
+  } catch(e) { toast(crudMsg(e), 'error'); crudDesbloquear(btn); }
 }
 
 function openModal(html) {
