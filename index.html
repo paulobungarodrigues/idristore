@@ -4426,5 +4426,141 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
+
+<!-- ============================================================
+     CHATBOT PÚBLICO — IDRI Store (usa /api/chat, que chama a Groq)
+     A chave da Groq NUNCA fica aqui; fica no servidor (api/chat.js)
+     ============================================================ -->
+<style>
+  #idri-chat-fab{position:fixed;right:20px;bottom:20px;z-index:150;width:58px;height:58px;border-radius:50%;border:2px solid var(--blue);background:var(--black);color:#fff;font-size:26px;cursor:pointer;box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;transition:transform .2s}
+  #idri-chat-fab:hover{transform:scale(1.07)}
+  #idri-chat-panel{position:fixed;right:20px;bottom:90px;z-index:150;width:min(380px,calc(100vw - 24px));height:min(560px,calc(100vh - 120px));background:var(--milk);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--shadow-lg);display:none;flex-direction:column;overflow:hidden}
+  #idri-chat-panel.open{display:flex}
+  .ic-head{background:var(--black);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}
+  .ic-head b{font-size:15px;display:block}
+  .ic-head small{color:rgba(255,255,255,.65);font-size:12px}
+  .ic-close{margin-left:auto;background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:4px 8px}
+  .ic-body{flex:1;overflow-y:auto;padding:14px;background:var(--milk2);display:flex;flex-direction:column;gap:10px}
+  .ic-msg{max-width:86%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;word-wrap:break-word}
+  .ic-msg.bot{background:var(--milk);color:var(--text);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:4px}
+  .ic-msg.user{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+  .ic-msg.erro{background:rgba(225,62,62,.08);color:var(--red);border:1px solid rgba(225,62,62,.2);align-self:flex-start}
+  .ic-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .ic-chip{background:var(--milk);border:1px solid var(--border2);color:var(--text2);border-radius:30px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer}
+  .ic-chip:hover{border-color:var(--blue);color:var(--blue)}
+  .ic-typing{display:flex;gap:4px;padding:12px 14px}
+  .ic-typing i{width:7px;height:7px;border-radius:50%;background:var(--text3);animation:icb 1s infinite}
+  .ic-typing i:nth-child(2){animation-delay:.15s}.ic-typing i:nth-child(3){animation-delay:.3s}
+  @keyframes icb{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+  .ic-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);background:var(--milk)}
+  .ic-form input{flex:1;padding:11px 14px;font-size:14px;border-radius:30px}
+  .ic-form button{background:var(--black);color:#fff;border:none;border-radius:30px;padding:0 18px;font-weight:600;cursor:pointer}
+  .ic-form button:disabled{opacity:.5;cursor:default}
+  .ic-note{font-size:11px;color:var(--text3);text-align:center;padding:0 10px 8px;background:var(--milk)}
+  @media(max-width:520px){#idri-chat-panel{right:12px;bottom:84px}#idri-chat-fab{right:14px;bottom:14px}}
+</style>
+
+<button id="idri-chat-fab" type="button" aria-label="Abrir assistente da loja" title="Pergunte sobre os produtos">💬</button>
+<div id="idri-chat-panel" role="dialog" aria-label="Assistente da IDRI Store">
+  <div class="ic-head">
+    <div style="font-size:24px">🤖</div>
+    <div><b>Assistente IDRI Store</b><small>Pergunte sobre os nossos produtos</small></div>
+    <button class="ic-close" type="button" aria-label="Fechar" id="ic-close">✕</button>
+  </div>
+  <div class="ic-body" id="ic-body" aria-live="polite"></div>
+  <form class="ic-form" id="ic-form" autocomplete="off">
+    <input id="ic-input" maxlength="300" placeholder="Escreva a sua pergunta..." aria-label="Mensagem"/>
+    <button id="ic-send" type="submit">Enviar</button>
+  </form>
+  <div class="ic-note">Respostas automáticas. Confirme preço e stock com a loja.</div>
+</div>
+
+<script>
+(function(){
+  var fab = document.getElementById('idri-chat-fab');
+  var panel = document.getElementById('idri-chat-panel');
+  var body = document.getElementById('ic-body');
+  var form = document.getElementById('ic-form');
+  var input = document.getElementById('ic-input');
+  var send = document.getElementById('ic-send');
+  var historico = [];   // só em memória: some ao fechar o separador
+  var aEnviar = false;
+  var iniciado = false;
+
+  function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function formatar(t){ return esc(t).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>'); }
+
+  function adicionar(classe, texto, html){
+    var d = document.createElement('div');
+    d.className = 'ic-msg ' + classe;
+    if (html) d.innerHTML = formatar(texto); else d.textContent = texto;
+    body.appendChild(d);
+    body.scrollTop = body.scrollHeight;
+    return d;
+  }
+
+  function comecar(){
+    if (iniciado) return; iniciado = true;
+    adicionar('bot', 'Olá! 👋 Sou o assistente da IDRI Store. Posso ajudar com preços, promoções, disponibilidade e garantia dos nossos produtos.', false);
+    var chips = document.createElement('div'); chips.className = 'ic-chips';
+    ['Que telemóveis têm?','Há promoções?','Como posso pagar?','Como comprar?'].forEach(function(t){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'ic-chip'; b.textContent = t;
+      b.onclick = function(){ chips.remove(); enviar(t); };
+      chips.appendChild(b);
+    });
+    body.appendChild(chips);
+  }
+
+  function abrir(abrirPainel){
+    var abre = (typeof abrirPainel === 'boolean') ? abrirPainel : !panel.classList.contains('open');
+    panel.classList.toggle('open', abre);
+    fab.textContent = abre ? '✕' : '💬';
+    if (abre){ comecar(); setTimeout(function(){ input.focus(); }, 50); }
+  }
+
+  async function enviar(texto){
+    texto = (texto || '').trim();
+    if (!texto || aEnviar) return;
+    aEnviar = true; send.disabled = true; input.value = '';
+    adicionar('user', texto, false);
+    historico.push({role:'user', content: texto});
+    var typing = document.createElement('div');
+    typing.className = 'ic-msg bot ic-typing'; typing.innerHTML = '<i></i><i></i><i></i>';
+    body.appendChild(typing); body.scrollTop = body.scrollHeight;
+    try {
+      var r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({messages: historico.slice(-8)})
+      });
+      var d = await r.json().catch(function(){ return {}; });
+      typing.remove();
+      if (!r.ok || !d.reply){
+        historico.pop();
+        adicionar('erro', d.error || 'O assistente não está disponível neste momento. Fale connosco pelo WhatsApp.', false);
+      } else {
+        historico.push({role:'assistant', content: d.reply});
+        adicionar('bot', d.reply, true);
+      }
+    } catch(e){
+      typing.remove(); historico.pop();
+      adicionar('erro', 'Sem ligação. Verifique a internet e tente de novo.', false);
+    }
+    aEnviar = false; send.disabled = false; input.focus();
+  }
+
+  fab.addEventListener('click', function(){ abrir(); });
+  document.getElementById('ic-close').addEventListener('click', function(){ abrir(false); });
+  form.addEventListener('submit', function(e){ e.preventDefault(); enviar(input.value); });
+
+  // O entregador só vê o scanner: esconder o chatbot
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      try { if (typeof S !== 'undefined' && S.user && S.user.papel === 'entregador') { fab.style.display = 'none'; panel.style.display = 'none'; } } catch(e){}
+    }, 1500);
+  });
+})();
+</script>
+
 </body>
 </html>
