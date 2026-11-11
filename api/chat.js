@@ -7,7 +7,7 @@
 //
 // Variáveis de ambiente (Vercel > Settings > Environment Variables):
 //   GROQ_API_KEY       (obrigatória)  chave criada em console.groq.com
-//   GROQ_MODEL         (opcional)     por defeito: llama-3.3-70b-versatile
+//   GROQ_MODEL         (opcional)     por defeito: openai/gpt-oss-120b (com openai/gpt-oss-20b de reserva)
 //   SUPABASE_URL       (opcional)     por defeito: o do index.html
 //   SUPABASE_ANON_KEY  (opcional)     por defeito: a chave pública do index.html
 //   STORE_WHATSAPP     (opcional)     por defeito: +244 927 714 821
@@ -15,7 +15,7 @@
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://zorswazitkthxmaqvekh.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvcnN3YXppdGt0aHhtYXF2ZWtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzODg5MzYsImV4cCI6MjEwOTk2NDkzNn0.XJAgkTMmD-If9QZ6c-xOya61cWfIpbEn_KfvtxwaHrI';
-const GROQ_MODELS  = [process.env.GROQ_MODEL, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+const GROQ_MODELS  = [process.env.GROQ_MODEL, 'openai/gpt-oss-120b', 'openai/gpt-oss-20b']
   .filter((m, i, a) => m && a.indexOf(m) === i);
 const WHATSAPP     = process.env.STORE_WHATSAPP || '+244 927 714 821';
 
@@ -170,7 +170,8 @@ module.exports = async function handler(req, res) {
           body: JSON.stringify({
             model: modelo,
             temperature: 0.3,
-            max_tokens: 450,
+            max_tokens: 1200,          // os modelos gpt-oss gastam tokens a "pensar" antes de responder
+            reasoning_effort: 'low',
             messages: [{ role: 'system', content: system }, ...mensagens]
           })
         });
